@@ -1,0 +1,95 @@
+#!/usr/sbin/nft -f
+
+define whiteList = { your_ip.net }
+define adminList = { your_ip.net }
+define adminPorts = {22,80,443}
+
+
+
+#flush ruleset
+flush ruleset
+
+table ip filter {
+  	
+    #create counters
+    counter ssh {
+	}
+
+    counter web {
+	}
+
+    #create sets
+    set knocked {
+        type ipv4_addr
+        flags timeout
+    }
+
+    set ctid {
+        typeof ct id
+        flags timeout
+    }
+
+	chain globalInput {
+		type filter hook input priority 0; policy accept;
+                ip saddr $whiteList \
+                    accept \
+                    comment ">>> allow any traffic from white list hosts <<<"
+
+                tcp dport $adminPorts \
+                    counter \
+                    jump admin \
+                    comment ">>> redirect admin traffic to admin chain <<<"
+
+                # ICMP knoking to unlock ssh-port
+                # 13 packets with 666 packet size, like this "ping host_ip -s 666 -c 13"                
+                # timeout in the following rule should be enough to reach the number packets you want to knock
+                ct state new ip protocol icmp ip length 694 \
+                    counter \
+                    add @ctid {ct id timeout 15s} \
+                    accept \
+                    comment ">>> catching new ICMP connections of the right size, adding id to set <<<"
+                
+
+                ct id @ctid ct original packets > 13 \
+                    delete @knocked {ip saddr} \
+                    accept \
+                    comment ">>> delete IP-address if number of knocks exceeded <<<"
+
+                ct id @ctid ct original packets == 13 \
+                    add @knocked {ip saddr timeout 3h} \
+                    accept \
+                    comment ">>> add IP-address if number of knocks reached <<<"
+                
+                ip protocol icmp \
+                    drop \
+                    comment ">>> allow ICMP traffic <<<"
+
+                iif lo \
+                    accept \
+                    comment ">>> allow any localhost traffic <<<" 
+
+                ip protocol != icmp ct state established, related \
+                    counter \
+                    accept \
+                    comment ">>> allow any replied traffic except ICMP <<<"
+                
+                counter drop \
+                    comment ">>> drop any other traffic that not accepted by the rules above <<<"
+	}
+
+    chain admin {
+        counter name tcp dport map { 22 : "ssh", 80 : "web", 443 : "web" } \
+        comment ">>> count any packet to admin ports: $adminPorts <<<"
+        
+        ip saddr $adminList \
+        accept \
+        comment ">>> allow admin traffic from admin list hosts <<<"
+        
+        ip saddr @knocked \
+        accept \
+        comment ">>> allow admin traffic from knockers <<<"
+    }
+	
+}
+
+
