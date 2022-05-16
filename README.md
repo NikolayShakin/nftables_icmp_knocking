@@ -28,3 +28,6 @@ A side effect of this drawback is that if you'll see someone go through your ICM
 rule - it's a problem and it is almost guaranteed they can sniff your traffic.
 You have to consider all the risks and use ICMP-knocking as an addition 
 to other security levels and not instead of them.
+
+### How to use it?
+Just dowload ruleset.nft and run "nft -f ruleset.nft"
