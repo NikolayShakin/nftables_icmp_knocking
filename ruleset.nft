@@ -29,7 +29,7 @@ table ip filter {
         flags timeout
     }
 
-	chain globalInput {
+	chain INPUT {
 		type filter hook input priority 0; policy accept;
                 ip saddr $whiteList \
                     accept \
